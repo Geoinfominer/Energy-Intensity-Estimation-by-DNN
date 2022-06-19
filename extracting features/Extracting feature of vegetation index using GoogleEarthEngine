@@ -1,0 +1,64 @@
+// global variables
+var global_modis_NDVI = "MODIS/006/MOD13A2";
+var global_list_modis_NDVI_bands = ['NDVI'];
+var global_provs = ee.FeatureCollection('users/Your GEE Account/Your GEE directory/cities_tdt').select(['id','ename'],['id','name']);
+
+function create_yearly_NDVI_mean(year)
+{ 
+  var ee_product = global_modis_NDVI;
+  var list_bands = global_list_modis_NDVI_bands;
+  
+  var dataset = ee.ImageCollection(ee_product)
+                .filter(ee.Filter.date(ee.String(ee.Number(year).toInt32()).cat(ee.String('-01-01')),ee.String(ee.Number(year).toInt32()).cat(ee.String('-12-31'))));
+  dataset = dataset.select(list_bands);
+
+  var research_area = ee.Geometry.Rectangle([[65.16572886080984,56.72246629633448], 
+                                             [139.69697886080982,12.583328712174936]]);
+                                           
+  // clip into research_area
+  dataset = dataset.map
+  (
+    function(img)
+    {
+      return img.clip(research_area);
+    }
+  );
+  
+  // mean prodct
+  var dataset_mean = dataset.mean();
+  return dataset_mean; 
+}
+
+// list of years
+var years = ee.List.sequence(2000,2020);
+
+// map the list of years using function:create_yearly_reflectance_medium
+var list_imgs = years.map(create_yearly_NDVI_mean);
+
+// map the list of images using reduceRegions
+var list_feacol = list_imgs.map(
+  function(img)
+  {
+    var feacol = ee.Image(img).reduceRegions({
+                    collection: global_provs,
+                    reducer: ee.Reducer.mean(),
+                    scale:1000});
+    feacol = feacol.select(['id','name','mean']);//,['id','name','ndvi_mean']);
+    return feacol;                    
+  });
+
+
+// you can export data into Google Drive or Google Cloud Storage
+for (var i = 2000;i<=2020;i++)
+{
+  var feacol = ee.FeatureCollection(list_feacol.get(i-2000));
+  Export.table.toCloudStorage
+  ({
+  collection: feacol,
+  description: 'ndvi'+i.toString(),
+  bucket : 'energy_intensity_city', 
+  fileNamePrefix :'ndvi'+i.toString(),
+  fileFormat: 'csv'
+  });
+}
+
