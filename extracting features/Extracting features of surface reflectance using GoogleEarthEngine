@@ -1,0 +1,78 @@
+// global variables
+{
+var provs = ee.FeatureCollection('users/Your GEE Account/Your GEE directory/cities_tdt').select(['id','ename'],['id','name']);
+var years = ['2001','2002','2003','2004','2005','2006','2007','2008',
+             '2009','2010','2011','2012','2013','2014','2015','2016','2017','2018'];
+Map.addLayer(provs,{},'provs');
+}
+
+// reflection
+{
+// generate yearly mean
+{
+function bitwiseExtract(value, fromBit, toBit) 
+{
+  if (toBit === undefined){
+    toBit = fromBit;
+    }
+  var maskSize = ee.Number(1).add(toBit).subtract(fromBit);
+  var mask = ee.Number(1).leftShift(maskSize).subtract(1);
+  return value.rightShift(fromBit).bitwiseAnd(mask);
+}
+function removeCloud_Shadow(img)
+{
+  var qa = img.select('StateQA');
+  var cloudState = bitwiseExtract(qa, 0, 1) ;
+  var cloudShadowState = bitwiseExtract(qa, 2);
+  var cirrusState = bitwiseExtract(qa, 8, 9);
+  var mask = cloudState.eq(0)                       // Clear
+                       .and(cloudShadowState.eq(0)) // No cloud shadow
+                       .and(cirrusState.eq(0));     // No cirrus
+  var maskedImage = img.updateMask(mask);
+  return maskedImage;
+}
+function generateCloudFreeMeanProduct(year)
+{
+  var MOD09A1 = ee.ImageCollection("MODIS/006/MOD09A1")
+                  .filterDate(year+'-01-01',year+'-12-31');
+  MOD09A1 = MOD09A1.map(removeCloud_Shadow);
+  var img = MOD09A1.mean().select(['sur_refl_b01','sur_refl_b02','sur_refl_b03','sur_refl_b04','sur_refl_b05','sur_refl_b06','sur_refl_b07'],
+                                    ['b1','b2','b3','b4','b5','b6','b7']);
+  
+  return img;
+}
+var MOD09A1_yearly = ee.ImageCollection(years.map(generateCloudFreeMeanProduct));
+Map.addLayer(MOD09A1_yearly.first().clip(provs.union()),{min:0,max:4000},'MOD09A1_yearly');
+}
+// reduce
+{
+function reduce_reflection(img){
+  img = ee.Image(img);
+  var feacol = img.reduceRegions({
+                  collection: provs,
+                  reducer: ee.Reducer.mean(),
+                  scale:1000});
+  feacol = feacol.select(['id','b1','b2','b3','b4','b5','b6','b7','name'],
+                         ['id','b1mean','b2mean','b3mean','b4mean','b5mean','b6mean','b7mean','name']);
+  return feacol;                    
+}
+var feacol18_feacol34_reflection = MOD09A1_yearly.map(reduce_reflection);
+var list18_feacol34_reflection = feacol18_feacol34_reflection.toList(100);
+print(list18_feacol34_reflection);
+}
+}
+
+
+// you can export data into Google Drive or Google Cloud Storage
+for (var i = 2001;i<=2018;i++)
+{
+  var feacol = ee.FeatureCollection(list18_feacol34_reflection.get(i-2001));
+  Export.table.toCloudStorage
+  ({
+  collection: feacol,
+  description: 'reflection'+i.toString(),
+  bucket : 'energy_intensity_city', 
+  fileNamePrefix :'reflection'+i.toString(),
+  fileFormat: 'csv'
+  });
+}
