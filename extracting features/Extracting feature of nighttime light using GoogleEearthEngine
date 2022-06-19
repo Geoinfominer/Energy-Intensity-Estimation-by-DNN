@@ -1,0 +1,43 @@
+//** global variables **//
+
+//Please download the calibrated nighttime light data through this link: https://www.x-mol.com/groups/jinjimagroup/publications
+//then, upload this dataset into your Google Eearth Engine.
+
+var NTLcol = ee.ImageCollection(['users/Your GEE Account/NTL/2001','users/Your GEE Account/NTL/2002','users/Your GEE Account/NTL/2003',
+                                 'users/Your GEE Account/NTL/2004','users/Your GEE Account/NTL/2005','users/Your GEE Account/NTL/2006',
+                                 'users/Your GEE Account/NTL/2007','users/Your GEE Account/NTL/2008','users/Your GEE Account/NTL/2009',
+                                 'users/Your GEE Account/NTL/2010','users/Your GEE Account/NTL/2011','users/Your GEE Account/NTL/2012',
+                                 'users/Your GEE Account/NTL/2013','users/Your GEE Account/NTL/2014','users/Your GEE Account/NTL/2015',
+                                 'users/Your GEE Account/NTL/2016','users/Your GEE Account/NTL/2017','users/Your GEE Account/NTL/2018']);
+
+var provs = ee.FeatureCollection('users/Your GEE Account/Your GEE directory/cities_tdt').select(['id','ename'],['id','name']);
+
+// show image
+Map.addLayer(ee.Image(NTLcol.first()),{	min: 0.0,max: 63.0});
+
+// map the list of images using reduceRegions
+var list_feacol = NTLcol.toList(100).map(
+  function(img)
+  {
+    var feacol = ee.Image(img).reduceRegions({
+                    collection: provs,
+                    reducer: ee.Reducer.mean(),
+                    scale:1000});
+    feacol = feacol.select(['id','name','mean']);//,['id','name','ntl_mean']);
+    return feacol;                    
+  });
+
+// you can export data into Google Drive or Google Cloud Storage
+for (var i = 2001;i<=2018;i++)
+{
+  var feacol = ee.FeatureCollection(list_feacol.get(i-2001));
+  Export.table.toCloudStorage
+  ({
+  collection: feacol,
+  description: 'ntl'+i.toString(),
+  bucket : 'energy_intensity_city', 
+  fileNamePrefix :'ntl'+i.toString(),
+  fileFormat: 'csv'
+  });
+}
+
