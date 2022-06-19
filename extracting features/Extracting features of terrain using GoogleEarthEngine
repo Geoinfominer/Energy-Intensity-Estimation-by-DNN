@@ -1,0 +1,47 @@
+//** global variances
+var elevation = ee.Image("CGIAR/SRTM90_V4");
+var entropy = elevation.entropy(ee.Kernel.circle(3, 'pixels',true));
+var provs = ee.FeatureCollection('users/Your GEE Account/Your GEE directory/cities_tdt').select(['id','ename'],['id','name']);
+print(provs);
+// show elevation
+Map.addLayer(elevation,{min:0,max:5000});
+
+
+// reduceRegions for elevation
+{
+var feacol_elevation = elevation.reduceRegions({
+                                collection: provs,
+                                reducer: ee.Reducer.mean(),
+                                scale:1000});
+print(feacol_elevation);
+feacol_elevation = feacol_elevation.select(['id','name','mean'],['id','name','elevation_mean']);
+
+// you can export data into Google Drive or Google Cloud Storage
+Export.table.toCloudStorage
+  ({
+  collection: feacol_elevation,
+  description: 'elevation',
+  bucket : 'energy_intensity_city', 
+  fileNamePrefix :'elevation',
+  fileFormat: 'csv'
+  });
+}
+
+// reduceRegions for entropy
+{
+var feacol_entropy = entropy.reduceRegions({
+                         collection: provs,
+                         reducer: ee.Reducer.mean(),
+                         scale:1000});
+feacol_entropy = feacol_entropy.select(['id','name','mean'],['id','name','entropy_mean']);
+
+// you can export data into Google Drive or Google Cloud Storage
+Export.table.toCloudStorage
+  ({
+  collection: feacol_entropy,
+  description: 'entropy',
+  bucket : 'energy_intensity_city', 
+  fileNamePrefix :'entropy',
+  fileFormat: 'csv'
+  });
+}
