@@ -1,0 +1,80 @@
+// global variables
+var global_modis_LST = "MODIS/006/MOD11A2";
+var global_list_modis_LST_bands = ['LST_Day_1km'];
+var global_provs = ee.FeatureCollection('users/Your GEE Account/Your GEE directory/cities_tdt').select(['id','ename'],['id','name']);
+
+function create_yearly_LST_mean(year)
+{
+  //** desc: create modis yearly reflectance medium(or min) prodct 
+  //** para: year(int)
+  //** global: global_modis_LST, (say "MODIS/006/MOD11A2")
+  //** global: global_list_modis_LST_bands
+  //** return: image object, yearly LST mean prodct of this year
+  
+  var ee_product = global_modis_LST;
+  var list_bands = global_list_modis_LST_bands;
+  
+  var dataset = ee.ImageCollection(ee_product)
+                .filter(ee.Filter.date(ee.String(ee.Number(year).toInt32()).cat(ee.String('-01-01')),ee.String(ee.Number(year).toInt32()).cat(ee.String('-12-31'))));
+  var dataset = dataset.select(list_bands);
+
+  var research_area = ee.Geometry.Rectangle([[65.16572886080984,56.72246629633448], 
+                                             [139.69697886080982,12.583328712174936]]);
+                                           
+  // clip into research_area
+  var dataset = dataset.map
+  (
+    function(img)
+    {
+      return img.clip(research_area);
+    }
+  );
+  
+  // mean prodct
+  var dataset_mean = dataset.mean();
+  
+  // set time property
+  var res_img = ee.Image(dataset_mean).set({time:ee.String(ee.Number(year).toInt32())});
+  return res_img; 
+}
+
+// list of years
+var years = ee.List.sequence(2000,2020);
+
+// map the list of years using function:create_yearly_reflectance_medium
+var list_imgs = years.map(create_yearly_LST_mean);
+
+Map.addLayer(ee.Image(list_imgs.get(0)),{	min:14000.0,max:16000.0,palette: [
+    '040274', '040281', '0502a3', '0502b8', '0502ce', '0502e6',
+    '0602ff', '235cb1', '307ef3', '269db1', '30c8e2', '32d3ef',
+    '3be285', '3ff38f', '86e26f', '3ae237', 'b5e22e', 'd6e21f',
+    'fff705', 'ffd611', 'ffb613', 'ff8b13', 'ff6e08', 'ff500d',
+    'ff0000', 'de0101', 'c21301', 'a71001', '911003'
+  ]});
+
+// map the list of images using reduceRegions
+var list_feacol = list_imgs.map(
+  function(img)
+  {
+    var feacol = ee.Image(img).reduceRegions({
+                    collection: global_provs,
+                    reducer: ee.Reducer.mean(),
+                    scale:1000});
+    feacol = feacol.select(['id','name','mean']);//,['id','name','lst_mean']);
+    return feacol;                    
+  });
+
+
+// you can export data into Google Drive or Google Cloud Storage
+for (var i = 2000;i<=2020;i++)
+{
+  var feacol = ee.FeatureCollection(list_feacol.get(i-2000));
+  Export.table.toCloudStorage
+  ({
+    collection : feacol, 
+    description : 'lst'+i.toString(),
+    bucket : 'energy_intensity_city', 
+    fileNamePrefix : 'lst'+i.toString(),
+    fileFormat: 'csv'
+  });
+}
