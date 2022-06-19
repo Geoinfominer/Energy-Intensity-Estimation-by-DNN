@@ -1,5 +1,5 @@
 # Energy-Intensity-Estimation-by-DNN
-The code and data provided here is from the paper "Building a top-down method based on machine learning for evaluating energy intensity at a fine scale" published on Energy.
+The code and data provided here is from the paper "Building a top-down method based on machine learning for evaluating energy intensity at a fine scale" published on Energy(https://doi.org/10.1016/j.energy.2022.124505).
 
 To run the code of this project, you should be able to use Python and Google Earth Engine.
 
